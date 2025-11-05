@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 // 🔹 Replace with your Edge Function URL
 // const String deleteUserUrl = 'https://xcmlnqspnqyzwthobyrm.supabase.co/functions/v1/delete_user';
 const String deleteUserUrl =
-    'https://xcmlnqspnqyzwthobyrm.supabase.co/functions/v1/delete-user';
+    'https://xcmlnqspnqyzwthobyrm.supabase.co/functions/v1/delete_user';
 
 Future<void> deleteProfile({required String userId}) async {
   final uri = Uri.parse(deleteUserUrl);

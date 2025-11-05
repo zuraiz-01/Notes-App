@@ -26,16 +26,25 @@ class AuthService {
 
   //sign in with google
   // 🔹 Sign in with Google
+
   Future<void> signInWithGoogle() async {
     try {
       await _supabase.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: 'https://xcmlnqspnqyzwthobyrm.supabase.co/auth/v1/callback',
+        redirectTo: 'io.supabase.flutter://login-callback', // 👈 for mobile
+        // or use your web URL if using browser: https://yourapp.web.app/auth/callback
       );
     } catch (e) {
       throw AuthException('An error occurred during Google sign-in: $e');
     }
   }
+
+  // Future<void> signInWithGoogle() async {
+  //   await _supabase.auth.signInWithOAuth(
+  //     OAuthProvider.google,
+  //     redirectTo: 'myapp://login-callback',
+  //   );
+  // }
 
   // 🟣 Sign up with email and password
   Future<AuthResponse> signUpWithEmailPassword(

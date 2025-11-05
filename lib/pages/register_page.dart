@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:test/auth/auth_service.dart';
 import 'package:test/pages/login_page.dart';
+import 'package:test/services/notification_service.dart'; // ✅ Add this import
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -16,37 +17,61 @@ class _RegisterPageState extends State<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
+  // 🔹 SIGNUP Function with Notifications
   void signup() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
     if (password != confirmPassword) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Passwords don't match")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Passwords don't match")));
       return;
     }
 
     try {
+      // 🔔 Notify that signup started
+      await NotificationService().showNotification(
+        id: 1,
+        title: "Creating Account",
+        body: "Please wait while we create your account...",
+      );
+
       await authService.signUpWithEmailPassword(email, password);
 
       if (!mounted) return;
 
-      // ✅ After signup, go to Login Page instead of popping
+      // 🔔 Notify that signup was successful
+      await NotificationService().showNotification(
+        id: 2,
+        title: "Account Created Successfully",
+        body: "Your account has been created. Please log in.",
+      );
+
+      // ✅ After signup, go to Login Page
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const LoginPage()),
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Account created successfully! Please log in.")),
+        const SnackBar(
+          content: Text("Account created successfully! Please log in."),
+        ),
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
+        // 🔔 Notify that signup failed
+        await NotificationService().showNotification(
+          id: 3,
+          title: "Signup Failed",
+          body: "An error occurred while creating your account.",
         );
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     }
   }

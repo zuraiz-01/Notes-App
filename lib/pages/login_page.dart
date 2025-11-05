@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:test/auth/auth_service.dart';
 import 'package:test/pages/home_page.dart';
 import 'package:test/pages/register_page.dart';
+import '../services/notification_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,6 +19,18 @@ class _LoginPageState extends State<LoginPage> {
   final passwordController = TextEditingController();
   bool loading = false;
 
+  // StreamSubscription for Google login listener
+  StreamSubscription<AuthState>? _authSub;
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  // Email/Password Login
   Future<void> _login() async {
     if (!mounted) return;
     setState(() => loading = true);
@@ -28,14 +41,18 @@ class _LoginPageState extends State<LoginPage> {
         password: passwordController.text.trim(),
       );
 
+      // Show notification
+      await NotificationService().showNotification(
+        id: 0,
+        title: "Login Attempt",
+        body: "You just tried to login",
+      );
+
       if (response.session != null && mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const HomePage()),
-          );
-        });
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomePage()),
+        );
       }
     } on AuthException catch (e) {
       if (mounted) {
@@ -50,17 +67,92 @@ class _LoginPageState extends State<LoginPage> {
         ).showSnackBar(SnackBar(content: Text('Login failed: $e')));
       }
     } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  // // Google Login
+  // Future<void> _googleLogin() async {
+  //   StreamSubscription<AuthState>? authSub;
+
+  //   try {
+  //     final authService = AuthService();
+  //     await authService.signInWithGoogle();
+
+  //     // Listen to the auth state change after the Google login attempt
+  //     authSub = Supabase.instance.client.auth.onAuthStateChange.listen((
+  //       event,
+  //     ) async {
+  //       final session = event.session;
+  //       if (session != null && mounted) {
+  //         // Show notification
+  //         await NotificationService().showNotification(
+  //           id: 0,
+  //           title: "Login Attempt",
+  //           body: "You just tried to login with Google",
+  //         );
+
+  //         // Navigate to HomePage after successful login
+  //         Navigator.pushReplacement(
+  //           context,
+  //           MaterialPageRoute(builder: (_) => const HomePage()),
+  //         );
+  //       }
+  //     });
+  //   } catch (e) {
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(
+  //         context,
+  //       ).showSnackBar(SnackBar(content: Text('Google sign-in failed: $e')));
+  //     }
+  //   }
+  // Google Login
+  Future<void> _googleLogin() async {
+    StreamSubscription<AuthState>? authSub;
+
+    try {
+      final authService = AuthService();
+      await authService.signInWithGoogle();
+
+      // 🔔 Show notification (same as email login)
+      await NotificationService().showNotification(
+        id: 1,
+        title: "Login Attempt",
+        body: "You just tried to login with Google",
+      );
+
+      // Listen to the auth state change after the Google login attempt
+      authSub = Supabase.instance.client.auth.onAuthStateChange.listen((
+        event,
+      ) async {
+        final session = event.session;
+        if (session != null && mounted) {
+          // ✅ Navigate to HomePage after successful login
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const HomePage()),
+          );
+        }
+      });
+    } catch (e) {
       if (mounted) {
-        setState(() => loading = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Google sign-in failed: $e')));
       }
     }
+
+    // Cancel subscription after frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      authSub?.cancel();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final Color bg = const Color(0xFFF5F6FA);
     final Color card = Colors.white;
-    final Color accent = const Color(0xFF9C8EF3); // same as ProfilePage
+    final Color accent = const Color(0xFF9C8EF3);
     final size = MediaQuery.of(context).size;
     final isMobile = size.width < 600;
 
@@ -79,7 +171,6 @@ class _LoginPageState extends State<LoginPage> {
               borderRadius: BorderRadius.circular(26),
               boxShadow: [
                 BoxShadow(
-                  // ignore: deprecated_member_use
                   color: Colors.grey.withOpacity(0.15),
                   blurRadius: 25,
                   offset: const Offset(0, 10),
@@ -93,10 +184,8 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // App Icon
                 CircleAvatar(
                   radius: 36,
-                  // ignore: deprecated_member_use
                   backgroundColor: accent.withOpacity(0.15),
                   child: const Icon(
                     Icons.note_alt_rounded,
@@ -105,8 +194,6 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-
-                // Title
                 Text(
                   'Welcome Back 👋',
                   textAlign: TextAlign.center,
@@ -124,7 +211,6 @@ class _LoginPageState extends State<LoginPage> {
                     fontSize: isMobile ? 14 : 15,
                   ),
                 ),
-
                 const SizedBox(height: 32),
 
                 // Email Field
@@ -134,7 +220,6 @@ class _LoginPageState extends State<LoginPage> {
                   icon: Icons.email_outlined,
                   accent: accent,
                 ),
-
                 const SizedBox(height: 18),
 
                 // Password Field
@@ -145,14 +230,15 @@ class _LoginPageState extends State<LoginPage> {
                   accent: accent,
                   obscureText: true,
                 ),
-
                 const SizedBox(height: 28),
 
-                // Login Button
+                // Email/Password Login Button
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: loading ? null : _login,
+                    onPressed: () async {
+                      await _login();
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: accent,
                       foregroundColor: Colors.white,
@@ -180,7 +266,6 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                   ),
                 ),
-
                 const SizedBox(height: 22),
 
                 // Divider
@@ -204,49 +289,14 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 22),
 
-                // Google Sign In
+                // Google Sign In Button
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     onPressed: () async {
-                      StreamSubscription<AuthState>? authSub;
-
-                      try {
-                        final authService = AuthService();
-                        await authService.signInWithGoogle();
-
-                        authSub = Supabase
-                            .instance
-                            .client
-                            .auth
-                            .onAuthStateChange
-                            .listen((event) {
-                              final session = event.session;
-                              if (session != null && context.mounted) {
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const HomePage(),
-                                  ),
-                                );
-                              }
-                            });
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Google sign-in failed: $e'),
-                            ),
-                          );
-                        }
-                      }
-
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        authSub?.cancel();
-                      });
+                      await _googleLogin();
                     },
                     icon: Image.asset(
                       'assets/google_icon.jpeg',
@@ -263,7 +313,6 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(
-                        // ignore: deprecated_member_use
                         color: accent.withOpacity(0.6),
                         width: 1.2,
                       ),
@@ -275,7 +324,6 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 26),
 
                 // Footer
@@ -303,7 +351,7 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // Reusable Input Field Widget
+  // Reusable Input Field
   Widget _inputField({
     required TextEditingController controller,
     required String hint,

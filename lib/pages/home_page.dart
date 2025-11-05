@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:test/pages/login_page.dart';
 import 'package:test/pages/notes_page.dart';
 import 'package:test/pages/profile_page.dart';
+import 'package:test/services/notification_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -20,10 +21,45 @@ class _HomePageState extends State<HomePage> {
     setState(() => selectedIndex = index);
   }
 
+  // Future<void> _logout() async {
+  //   try {
+  //     await Supabase.instance.client.auth.signOut();
+  //     if (!mounted) return;
+  //     WidgetsBinding.instance.addPostFrameCallback((_) {
+  //       if (!mounted) return;
+  //       Navigator.pushReplacement(
+  //         context,
+  //         MaterialPageRoute(builder: (context) => const LoginPage()),
+  //       );
+  //     });
+  //   } catch (e) {
+  //     if (mounted) {
+  //       ScaffoldMessenger.of(
+  //         context,
+  //       ).showSnackBar(SnackBar(content: Text('Logout failed: $e')));
+  //     }
+  //   }
+  // }
   Future<void> _logout() async {
     try {
+      // 🔔 Notify user logout started
+      await NotificationService().showNotification(
+        id: 6,
+        title: "Logging Out",
+        body: "You are being logged out...",
+      );
+
       await Supabase.instance.client.auth.signOut();
+
+      // 🔔 Notify user logout success
+      await NotificationService().showNotification(
+        id: 7,
+        title: "Logged Out Successfully",
+        body: "You have been signed out of your account.",
+      );
+
       if (!mounted) return;
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         Navigator.pushReplacement(
@@ -36,6 +72,13 @@ class _HomePageState extends State<HomePage> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Logout failed: $e')));
+
+        // 🔔 Notify user logout failure
+        await NotificationService().showNotification(
+          id: 8,
+          title: "Logout Failed",
+          body: "There was an issue signing you out. Please try again.",
+        );
       }
     }
   }

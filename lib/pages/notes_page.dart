@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:test/services/notification_service.dart'; // ✅ Import this
 
 class NotesPage extends StatefulWidget {
   const NotesPage({super.key});
@@ -45,9 +46,11 @@ class _NotesPageState extends State<NotesPage> {
         notes = List<Map<String, dynamic>>.from(response);
       });
     } on PostgrestException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading notes: ${e.message}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading notes: ${e.message}')),
+        );
+      }
     } finally {
       setState(() => loading = false);
     }
@@ -60,8 +63,16 @@ class _NotesPageState extends State<NotesPage> {
       text: note?['content'] ?? '',
     );
     final isEditing = note != null;
-
     final accent = const Color(0xFF9C8EF3);
+
+    // 🔔 Notify user when opening dialog
+    await NotificationService().showNotification(
+      id: isEditing ? 11 : 10,
+      title: isEditing ? "Editing Note" : "Creating New Note",
+      body: isEditing
+          ? "You are now editing your note."
+          : "You are creating a new note.",
+    );
 
     final result = await showDialog<bool>(
       context: context,
@@ -69,7 +80,7 @@ class _NotesPageState extends State<NotesPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           isEditing ? 'Edit Note' : 'New Note',
-          style: TextStyle(fontWeight: FontWeight.w700, color: Colors.black87),
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         content: SingleChildScrollView(
           child: Column(
@@ -143,21 +154,40 @@ class _NotesPageState extends State<NotesPage> {
 
     try {
       if (isEditing) {
-        await supabase.from('notes').update(data).eq('id', note['id']);
+        await supabase.from('notes').update(data).eq('id', note!['id']);
+
+        // 🔔 Notify note update
+        await NotificationService().showNotification(
+          id: 12,
+          title: "Note Updated",
+          body: "Your note has been successfully updated.",
+        );
+
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Note updated')));
       } else {
         await supabase.from('notes').insert(data).select();
+
+        // 🔔 Notify note add
+        await NotificationService().showNotification(
+          id: 13,
+          title: "Note Added",
+          body: "Your new note has been added successfully.",
+        );
+
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Note added')));
       }
+
       _loadNotes();
     } on PostgrestException catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
+      }
     }
   }
 
@@ -189,14 +219,24 @@ class _NotesPageState extends State<NotesPage> {
 
     try {
       await supabase.from('notes').delete().eq('id', id);
+
+      // 🔔 Notify note deletion
+      await NotificationService().showNotification(
+        id: 14,
+        title: "Note Deleted",
+        body: "A note has been deleted successfully.",
+      );
+
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Note deleted')));
       _loadNotes();
     } on PostgrestException catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.message}')));
+      }
     }
   }
 

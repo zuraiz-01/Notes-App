@@ -1,11 +1,12 @@
 // ignore_for_file: await_only_futures
 
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:test/pages/login_page.dart';
-import '../auth/delete_user_service.dart';
+import 'package:test/services/notification_service.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
@@ -79,6 +80,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
       );
       if (picked != null && mounted) {
         setState(() => _imageFile = File(picked.path));
+
+        // 🔔 Notify user when image picked
+        await NotificationService().showNotification(
+          id: 1,
+          title: "Profile Picture Updated",
+          body: "You selected a new profile picture.",
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -93,6 +101,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Future<void> _saveProfile() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
+
+    // 🔔 Notify user that save started
+    await NotificationService().showNotification(
+      id: 2,
+      title: "Saving Profile",
+      body: "Your profile update is being saved...",
+    );
 
     setState(() => loading = true);
     String? imagePath;
@@ -123,7 +138,41 @@ class _EditProfilePageState extends State<EditProfilePage> {
       }
     }
 
-    // Update profile
+    try {
+      // ✅ Update profile in Supabase
+      await supabase
+          .from('profiles')
+          .update({
+            'full_name': nameController.text.trim(),
+            'bio': bioController.text.trim(),
+            if (imagePath != null) 'avatar_url': imagePath,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', user.id);
+
+      // 🔔 Notify user success
+      await NotificationService().showNotification(
+        id: 3,
+        title: "Profile Updated",
+        body: "Your profile has been successfully updated.",
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update profile: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+
+    // Upsert ensures new data if missing
     try {
       final updates = {
         'id': user.id,
@@ -136,9 +185,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
       await supabase.from('profiles').upsert(updates);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully')),
-        );
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -154,6 +200,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
+  // 🔹 Confirm and delete account
   Future<void> _confirmDelete() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -176,38 +223,42 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
 
     if (confirm != true) return;
-
     if (!mounted) return;
+
+    // 🔔 Notify user deletion started
+    await NotificationService().showNotification(
+      id: 4,
+      title: "Account Deletion Started",
+      body: "Your account is being deleted...",
+    );
+
     setState(() => loading = true);
 
     try {
-      // ✅ Get current user
       final user = supabase.auth.currentUser;
+      if (user == null) throw Exception('User not logged in');
 
-      if (user == null) {
-        throw Exception('User not logged in');
-      }
-
-      final userId = user.id;
-      print('🔍 Deleting user with ID: $userId');
-
-      // ✅ Supabase automatically adds authorization headers
-      final response = await supabase.functions.invoke(
-        'delete-user',
-        body: {'user_id': userId},
+      final response = await Supabase.instance.client.functions.invoke(
+        'delete_user',
+        body: jsonEncode({'uuid': user.id}),
       );
 
-      print('📊 Response status: ${response.status}');
-      print('📊 Response data: ${response.data}');
-
       if (response.status != 200) {
-        final error = response.data is Map
-            ? (response.data['error'] ?? 'Unknown error')
-            : response.data.toString();
-        throw Exception(error);
+        throw Exception(
+          response.data is Map
+              ? (response.data['error'] ?? 'Unknown error')
+              : response.data.toString(),
+        );
       }
 
-      // ✅ Sign out the user
+      // 🔔 Notify success
+      await NotificationService().showNotification(
+        id: 5,
+        title: "Account Deleted",
+        body: "Your account has been permanently deleted.",
+      );
+
+      // ✅ Sign out user
       await supabase.auth.signOut();
 
       if (!mounted) return;
@@ -225,9 +276,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
       );
     } catch (e) {
       if (!mounted) return;
-
-      print('❌ Error: $e');
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to delete account: ${e.toString()}'),
@@ -411,15 +459,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
                   ),
                 ),
         ),
-
-        // 🔹 Loading Overlay
-        if (loading)
-          Container(
-            color: Colors.black.withOpacity(0.35),
-            child: const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            ),
-          ),
       ],
     );
   }
